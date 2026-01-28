@@ -35,23 +35,6 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Creează tabelul users dacă nu există
-(async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        elo INTEGER DEFAULT 1000
-      );
-    `);
-    console.log("Tabelul users este gata!");
-  } catch (err) {
-    console.error("Eroare la crearea tabelului users:", err);
-  }
-})();
-
 /* ===== FUNCTII UTILE ===== */
 function requireAuth(req,res,next){ if(!req.session.user) return res.redirect("/"); next(); }
 
@@ -193,4 +176,24 @@ async function createMatch(username, mode){
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
-server.listen(PORT,()=>console.log("Server running on port",PORT));
+
+// Initialize DB first, then start server
+async function initDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        elo INTEGER DEFAULT 1000
+      );
+    `);
+    console.log("Tabelul users este gata!");
+  } catch (err) {
+    console.error("Eroare la crearea tabelului users:", err);
+  }
+}
+
+initDatabase().then(() => {
+  server.listen(PORT,()=>console.log("Server running on port",PORT));
+});
