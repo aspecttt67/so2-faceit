@@ -36,6 +36,16 @@
     ul { list-style: none; padding: 0; }
     li { background: #1e293b; margin: 5px; padding: 8px; border-radius: 6px; }
     .pickable { cursor: pointer; }
+    form {
+      margin-bottom: 20px;
+    }
+    input {
+      padding: 8px;
+      margin: 5px;
+      border-radius: 6px;
+      border: none;
+      width: 200px;
+    }
   </style>
 </head>
 <body>
@@ -43,8 +53,18 @@
 <h1>Standoff 2 Faceit</h1>
 
 <div class="box">
-  <button id="join">Join Queue</button>
-  <p id="queueText">Queue: 0/10</p>
+
+  <!-- FORMULAR LOGIN -->
+  <form id="loginForm" method="POST" action="/login">
+    <input name="username" placeholder="Username" required />
+    <input name="password" type="password" placeholder="Password" required />
+    <button type="submit">Login</button>
+  </form>
+
+  <!-- BUTON JOIN QUEUE (ascuns până după login) -->
+  <button id="join" style="display:none;">Join Queue</button>
+  <p id="queueText" style="display:none;">Queue: 0/10</p>
+
 </div>
 
 <div id="match" class="box" style="display:none;">
