@@ -1,49 +1,37 @@
-// ===== IMPORTURI =====
 const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
-const http = require("http");
 const path = require("path");
-const { Server } = require("socket.io");
 const { Pool } = require("pg");
 
-// ===== SERVER =====
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const PORT = process.env.PORT || 3000;
 
-// ===== MIDDLEWARE =====
-app.use(express.json());
+/* =======================
+   MIDDLEWARE
+======================= */
 app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "super-secret-key",
+    secret: "super-secret",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, httpOnly: true },
   })
 );
+
 app.use("/public", express.static(path.join(__dirname, "public")));
 
-// ===== DATABASE POSTGRES =====
+/* =======================
+   DATABASE
+======================= */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
-// ===== DEBUG CONEXIUNE =====
-pool.query("SELECT NOW()")
-  .then(r => console.log("✅ DB connected:", r.rows))
-  .catch(e => console.error("❌ DB connection error:", e));
-
-// ===== FUNCTII UTILE =====
-function requireAuth(req, res, next) {
-  if (!req.session.user) return res.redirect("/");
-  next();
-}
-
-// ===== CREARE TABEL AUTOMAT CU DEBUG =====
-async function createUsersTable() {
+async function initDB() {
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -53,16 +41,26 @@ async function createUsersTable() {
         elo INTEGER DEFAULT 1000
       );
     `);
-    console.log("✅ Tabelul users este gata!");
+    console.log("✅ Tabela users este gata");
   } catch (err) {
-    console.error("❌ Eroare la crearea tabelului users:", err);
+    console.error("❌ Eroare DB init:", err);
   }
 }
-createUsersTable();
 
-// ===== ROUTES =====
+initDB();
+
+/* =======================
+   AUTH MIDDLEWARE
+======================= */
+function requireAuth(req, res, next) {
+  if (!req.session.user) return res.redirect("/");
+  next();
+}
+
+/* =======================
+   ROUTES
+======================= */
 app.get("/", (req, res) => {
-  if (req.session.user) return res.redirect("/dashboard");
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
@@ -71,53 +69,85 @@ app.get("/register", (req, res) => {
 });
 
 app.get("/dashboard", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "protected", "dashboard.html"));
+  res.sendFile(path.join(__dirname, "public", "dashboard.html"));
 });
 
 app.get("/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
 
-// ===== AUTH cu debug complet =====
+/* =======================
+   REGISTER
+======================= */
 app.post("/register", async (req, res) => {
-  const { username, password } = req.body;
-  const hash = await bcrypt.hash(password, 10);
   try {
-    const result = await pool.query(
-      "INSERT INTO users (username,password) VALUES ($1,$2) RETURNING *",
+    const { username, password } = req.body;
+    if (!username || !password)
+      return res.status(400).send("Missing data");
+
+    const hash = await bcrypt.hash(password, 10);
+
+    await pool.query(
+      "INSERT INTO users (username, password) VALUES ($1, $2)",
       [username, hash]
     );
-    console.log("✅ User creat:", result.rows[0]);
+
     req.session.user = { username };
     res.redirect("/dashboard");
   } catch (err) {
-    console.error("❌ Eroare register:", err);
-    res.status(400).send("Database error (check logs)");
+    console.error("❌ Register error:", err);
+    res.status(500).send("Database error");
   }
 });
 
+/* =======================
+   LOGIN
+======================= */
 app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
   try {
-    const r = await pool.query("SELECT * FROM users WHERE username=$1", [username]);
-    console.log("🔍 Login query result:", r.rows);
+    const { username, password } = req.body;
 
-    if (r.rows.length === 0) return res.status(401).send("User not found");
+    const result = await pool.query(
+      "SELECT * FROM users WHERE username = $1",
+      [username]
+    );
 
-    const user = r.rows[0];
+    if (result.rows.length === 0) {
+      return res.status(401).send("User not found");
+    }
+
+    const user = result.rows[0];
     const ok = await bcrypt.compare(password, user.password);
-    if (!ok) return res.status(401).send("Wrong password");
 
-    req.session.user = { username };
+    if (!ok) {
+      return res.status(401).send("Wrong password");
+    }
+
+    req.session.user = { username: user.username };
     res.redirect("/dashboard");
   } catch (err) {
-    console.error("❌ Eroare login:", err);
-    res.status(500).send("Database error (check logs)");
+    console.error("❌ Login error:", err);
+    res.status(500).send("Database error");
   }
 });
 
-// ===== START SERVER =====
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log("✅ Server running on port", PORT);
+/* =======================
+   ADMIN – VIEW USERS
+======================= */
+app.get("/api/users", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, username, elo FROM users ORDER BY elo DESC"
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: "DB error" });
+  }
+});
+
+/* =======================
+   START SERVER
+======================= */
+app.listen(PORT, () => {
+  console.log("🚀 Server running on port", PORT);
 });
