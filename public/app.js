@@ -8,6 +8,7 @@ const team1El = document.getElementById("team1");
 const team2El = document.getElementById("team2");
 const poolEl = document.getElementById("pool");
 const mapsEl = document.getElementById("mapsList");
+const leaderboardEl = document.getElementById("leaderboardList");
 
 // Functie Level
 function getLevel(elo) {
@@ -23,11 +24,26 @@ function getLevel(elo) {
   return 10;
 }
 
+// TAB NAVIGATION
+const tabButtons = document.querySelectorAll(".tab-btn");
+const tabContents = document.querySelectorAll(".tab-content");
+
+tabButtons.forEach(btn => {
+  btn.addEventListener("click", () => {
+    tabButtons.forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const tab = btn.dataset.tab;
+    tabContents.forEach(tc => {
+      tc.style.display = tc.id === tab ? "block" : "none";
+    });
+  });
+});
+tabButtons[0].click(); // tab default
+
 // Join Queue
 joinBtn.addEventListener("click", () => {
   const username = prompt("Introdu username-ul tău");
   if (!username) return;
-  console.log("Trimitem joinQueue pentru:", username);
   socket.emit("joinQueue", username);
 });
 
@@ -104,4 +120,14 @@ socket.on("matchStart", match => {
   alert(`Match start! Harta finala: ${match.finalMap}`);
   matchDiv.style.display = "none";
   queueText.innerText = "Queue: 0/10";
+});
+
+// Leaderboard
+socket.on("updateLeaderboard", users => {
+  leaderboardEl.innerHTML = "";
+  users.forEach(u => {
+    const li = document.createElement("li");
+    li.textContent = `${u.username} - ELO: ${u.elo} (Lvl ${getLevel(u.elo)})`;
+    leaderboardEl.appendChild(li);
+  });
 });
