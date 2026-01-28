@@ -21,18 +21,26 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(
   session({
-    secret: "super-secret-key",
+    secret: process.env.SESSION_SECRET || "super-secret-key",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false,
+      secure: false,  // setează true dacă ai HTTPS
       httpOnly: true
     }
   })
 );
 
-// 🔓 DOAR public e static
-app.use(express.static(path.join(__dirname, "public")));
+// Servează fișierele statice din /public la ruta /public
+app.use("/public", express.static(path.join(__dirname, "public")));
+
+// Ruta principală (login)
+app.get("/", (req, res) => {
+  if (req.session.user) {
+    return res.redirect("/dashboard");
+  }
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
 /* ===== AUTH MIDDLEWARE ===== */
 
