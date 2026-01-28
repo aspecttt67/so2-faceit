@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <title>SO2 FACEIT</title>
+  <style>
+    body {
+      background:#0f0f0f;
+      color:#fff;
+      font-family:Arial;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      height:100vh;
+    }
+    .box {
+      background:#1c1c1c;
+      padding:30px;
+      border-radius:10px;
+      width:300px;
+      text-align:center;
+      box-shadow:0 0 20px #000;
+    }
+    input, button {
+      width:100%;
+      margin:8px 0;
+      padding:10px;
+      border:none;
+      border-radius:5px;
+    }
+    button {
+      background:#ff5500;
+      color:#fff;
+      font-weight:bold;
+      cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>SO2 FACEIT</h2>
+    <input id="user" placeholder="Username">
+    <input id="pass" type="password" placeholder="Password">
+    <button onclick="register()">Register</button>
+    <button onclick="login()">Login</button>
+    <p id="msg"></p>
+  </div>
+
+<script>
+async function register(){
+  const r = await fetch("/register", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      username:user.value,
+      password:pass.value
+    })
+  });
+  msg.innerText = (await r.json()).success ? "Registered!" : "Error";
+}
+
+async function login(){
+  const r = await fetch("/login", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      username:user.value,
+      password:pass.value
+    })
+  });
+  const d = await r.json();
+  msg.innerText = d.success ? "Logged in!" : "Login failed";
+}
+</script>
+</body>
+</html>
