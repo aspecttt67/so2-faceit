@@ -19,16 +19,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use(session({ secret:"secret", resave:false, saveUninitialized:false }));
 app.use("/public", express.static(path.join(__dirname, "public")));
 
-// AUTH
 function requireAuth(req,res,next){ if(!req.session.user) return res.redirect("/"); next(); }
 function loadUsers(){ const p=path.join(__dirname,"users.json"); if(!fs.existsSync(p)) return []; const d=fs.readFileSync(p,"utf-8"); if(!d) return []; return JSON.parse(d); }
 function saveUsers(u){ fs.writeFileSync(path.join(__dirname,"users.json"),JSON.stringify(u,null,2)); }
 
-// Routes
 app.get("/",(req,res)=>{ if(req.session.user) return res.redirect("/dashboard"); res.sendFile(path.join(__dirname,"public","index.html")); });
 app.get("/register",(req,res)=>{ res.sendFile(path.join(__dirname,"public","register.html")); });
 
-// Dashboard trimite username în HTML
 app.get("/dashboard", requireAuth, (req,res)=>{
   const htmlPath = path.join(__dirname,"protected","dashboard.html");
   let html = fs.readFileSync(htmlPath,"utf-8");
@@ -38,7 +35,6 @@ app.get("/dashboard", requireAuth, (req,res)=>{
 
 app.get("/logout",(req,res)=>{ req.session.destroy(()=>res.redirect("/")); });
 
-// Register/Login
 app.post("/register",async(req,res)=>{
   const {username,password}=req.body;
   let users=loadUsers();
@@ -90,11 +86,8 @@ io.on("connection", socket => {
     const poolIndex = match.pool.findIndex(p => p.username === player);
     if (poolIndex === -1) return;
 
-    if (match.captains[0] === captain) {
-      match.team1.push(match.pool[poolIndex]);
-    } else if (match.captains[1] === captain) {
-      match.team2.push(match.pool[poolIndex]);
-    }
+    if (match.captains[0] === captain) match.team1.push(match.pool[poolIndex]);
+    else if (match.captains[1] === captain) match.team2.push(match.pool[poolIndex]);
 
     match.pool.splice(poolIndex,1);
     io.emit("updateDraft", match);
