@@ -1,74 +1,59 @@
 import express from "express";
-import fs from "fs";
-import bcrypt from "bcrypt";
-import session from "express-session";
+import http from "http";
 import path from "path";
+import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: "*" } });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(session({
-  secret: "so2-faceit-secret",
-  resave: false,
-  saveUninitialized: true
-}));
+app.use(express.static(path.join(__dirname, "public")));
 
-// 🔽 PAGINA PRINCIPALĂ
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "index.html"));
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-const USERS_FILE = "./users.json";
+let queue = [];
+let match = null;
 
-function loadUsers() {
-  if (!fs.existsSync(USERS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(USERS_FILE));
+io.on("connection", socket => {
+  socket.on("joinQueue", username => {
+    if (!queue.includes(username)) {
+      queue.push(username);
+      io.emit("queueUpdate", queue);
+
+      if (queue.length === 10) startMatch();
+    }
+  });
+
+  socket.on("pick", ({ team, player }) => {
+    if (!match) return;
+    match[team].push(player);
+    match.pool = match.pool.filter(p => p !== player);
+    io.emit("draftUpdate", match);
+  });
+
+  socket.on("rehost", () => io.emit("rehosted"));
+});
+
+function startMatch() {
+  const players = [...queue];
+  queue = [];
+
+  match = {
+    captains: [players[0], players[1]],
+    team1: [players[0]],
+    team2: [players[1]],
+    pool: players.slice(2),
+    host: players[Math.floor(Math.random() * 2)]
+  };
+
+  io.emit("matchStart", match);
 }
 
-function saveUsers(users) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
-
-app.post("/register", async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).json({ error: "Missing" });
-
-  const users = loadUsers();
-  if (users.find(u => u.username === username))
-    return res.status(400).json({ error: "User exists" });
-
-  const hash = await bcrypt.hash(password, 10);
-  users.push({ username, password: hash });
-  saveUsers(users);
-
-  res.json({ success: true });
-});
-
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const users = loadUsers();
-  const user = users.find(u => u.username === username);
-  if (!user) return res.status(400).json({ error: "Invalid" });
-
-  const ok = await bcrypt.compare(password, user.password);
-  if (!ok) return res.status(400).json({ error: "Invalid" });
-
-  req.session.user = { username };
-  res.json({ success: true });
-});
-
-app.get("/me", (req, res) => {
-  if (!req.session.user) return res.status(401).json(null);
-  res.json(req.session.user);
-});
-
-// 🔽 PORNIRE CORECTĂ PENTRU RAILWAY
-app.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log("Server running on :" + PORT));
