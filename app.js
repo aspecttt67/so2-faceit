@@ -14,6 +14,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+/* ===== MIDDLEWARE ===== */
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -32,7 +34,8 @@ app.use(
 // 🔓 DOAR public e static
 app.use(express.static(path.join(__dirname, "public")));
 
-// 🛡️ middleware auth
+/* ===== AUTH MIDDLEWARE ===== */
+
 function requireAuth(req, res, next) {
   if (!req.session.user) {
     return res.redirect("/");
@@ -40,10 +43,14 @@ function requireAuth(req, res, next) {
   next();
 }
 
+/* ===== ROUTES ===== */
+
 // 🔐 LOGIN
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  const users = JSON.parse(fs.readFileSync("users.json"));
+
+  const usersPath = path.join(__dirname, "users.json");
+  const users = JSON.parse(fs.readFileSync(usersPath, "utf-8"));
 
   const user = users.find(u => u.username === username);
   if (!user) return res.status(401).send("User not found");
@@ -52,13 +59,15 @@ app.post("/login", async (req, res) => {
   if (!ok) return res.status(401).send("Wrong password");
 
   req.session.user = { username };
-  res.redirect("/dashboard"); // 🔴 IMPORTANT
+  res.redirect("/dashboard");
 });
 
 // 📝 REGISTER
 app.post("/register", async (req, res) => {
   const { username, password } = req.body;
-  const users = JSON.parse(fs.readFileSync("users.json"));
+
+  const usersPath = path.join(__dirname, "users.json");
+  const users = JSON.parse(fs.readFileSync(usersPath, "utf-8"));
 
   if (users.find(u => u.username === username)) {
     return res.status(400).send("User exists");
@@ -67,7 +76,11 @@ app.post("/register", async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
   users.push({ username, password: hash });
 
-  fs.writeFileSync("users.json", JSON.stringify(users, null, 2));
+  fs.writeFileSync(
+    usersPath,
+    JSON.stringify(users, null, 2)
+  );
+
   res.redirect("/");
 });
 
@@ -83,7 +96,7 @@ app.get("/dashboard", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "protected", "dashboard.html"));
 });
 
-/* ===== Socket.IO ===== */
+/* ===== SOCKET.IO ===== */
 
 let queue = [];
 let match = null;
@@ -93,6 +106,7 @@ io.on("connection", socket => {
     if (!queue.includes(username)) {
       queue.push(username);
       io.emit("queueUpdate", queue);
+
       if (queue.length === 10) startMatch();
     }
   });
@@ -112,7 +126,10 @@ function startMatch() {
   io.emit("matchStart", match);
 }
 
+/* ===== START SERVER ===== */
+
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () =>
-  console.log("Server running on port", PORT)
-);
+
+server.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
