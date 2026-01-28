@@ -15,7 +15,6 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 /* ===== MIDDLEWARE ===== */
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -24,41 +23,37 @@ app.use(
     secret: process.env.SESSION_SECRET || "super-secret-key",
     resave: false,
     saveUninitialized: false,
-    cookie: {
-      secure: false,  // setează true dacă ai HTTPS
-      httpOnly: true
-    }
+    cookie: { secure: false, httpOnly: true }
   })
 );
 
-// Servează fișierele statice din /public la ruta /public
+// Serve static files
 app.use("/public", express.static(path.join(__dirname, "public")));
-
-// Ruta principală (login)
-app.get("/", (req, res) => {
-  if (req.session.user) {
-    return res.redirect("/dashboard");
-  }
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-/* ===== AUTH MIDDLEWARE ===== */
-
-function requireAuth(req, res, next) {
-  if (!req.session.user) {
-    return res.redirect("/");
-  }
-  next();
-}
 
 /* ===== ROUTES ===== */
 
-// 🔐 LOGIN
+// Login page
+app.get("/", (req, res) => {
+  if (req.session.user) return res.redirect("/dashboard");
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// Register page
+app.get("/register", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "register.html"));
+});
+
+/* ===== AUTH ===== */
+function requireAuth(req, res, next) {
+  if (!req.session.user) return res.redirect("/");
+  next();
+}
+
+// Login POST
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-
   const usersPath = path.join(__dirname, "users.json");
-  const users = JSON.parse(fs.readFileSync(usersPath, "utf-8"));
+  const users = JSON.parse(fs.readFileSync(usersPath, "utf-8") || "[]");
 
   const user = users.find(u => u.username === username);
   if (!user) return res.status(401).send("User not found");
@@ -70,12 +65,11 @@ app.post("/login", async (req, res) => {
   res.redirect("/dashboard");
 });
 
-// 📝 REGISTER
+// Register POST
 app.post("/register", async (req, res) => {
   const { username, password } = req.body;
-
   const usersPath = path.join(__dirname, "users.json");
-  const users = JSON.parse(fs.readFileSync(usersPath, "utf-8"));
+  const users = JSON.parse(fs.readFileSync(usersPath, "utf-8") || "[]");
 
   if (users.find(u => u.username === username)) {
     return res.status(400).send("User exists");
@@ -83,23 +77,17 @@ app.post("/register", async (req, res) => {
 
   const hash = await bcrypt.hash(password, 10);
   users.push({ username, password: hash });
-
-  fs.writeFileSync(
-    usersPath,
-    JSON.stringify(users, null, 2)
-  );
+  fs.writeFileSync(usersPath, JSON.stringify(users, null, 2));
 
   res.redirect("/");
 });
 
-// 🚪 LOGOUT
+// Logout
 app.get("/logout", (req, res) => {
-  req.session.destroy(() => {
-    res.redirect("/");
-  });
+  req.session.destroy(() => res.redirect("/"));
 });
 
-// 🔒 DASHBOARD PROTEJAT
+// Dashboard protejat
 app.get("/dashboard", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "protected", "dashboard.html"));
 });
@@ -135,9 +123,5 @@ function startMatch() {
 }
 
 /* ===== START SERVER ===== */
-
 const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-  console.log("Server running on port", PORT);
-});
+server.listen(PORT, () => console.log("Server running on port", PORT));
