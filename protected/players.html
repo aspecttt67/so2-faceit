@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<title>Admin Players - Standoff 2 Faceit</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { font-family: Arial; background:#0f172a; color:#e5e7eb; text-align:center; margin:0; padding:0; }
+h1 { background:#f97316; color:#000; margin:0; padding:15px; }
+.container { padding:20px; }
+input, select, button { padding:8px; margin:5px; border-radius:5px; border:none; }
+table { width:100%; border-collapse: collapse; margin-top:20px; }
+th, td { border:1px solid #f97316; padding:10px; text-align:center; }
+th { cursor:pointer; background:#f97316; color:#000; }
+tr:nth-child(even) { background:#1e293b; }
+</style>
+</head>
+<body>
+
+<h1>Jucători Înregistrați</h1>
+
+<div class="container">
+  <input type="text" id="searchInput" placeholder="Caută username..." />
+  <table id="playersTable">
+    <thead>
+      <tr>
+        <th data-sort="username">Username ▲▼</th>
+        <th data-sort="elo">ELO ▲▼</th>
+      </tr>
+    </thead>
+    <tbody id="playersBody"></tbody>
+  </table>
+  <p><a href="/dashboard" style="color:#f97316;">Înapoi la Dashboard</a></p>
+</div>
+
+<script>
+async function loadPlayers() {
+  const res = await fetch("/api/players");
+  const users = await res.json();
+  displayPlayers(users);
+}
+
+function displayPlayers(users) {
+  const tbody = document.getElementById("playersBody");
+  tbody.innerHTML = "";
+  users.forEach(u => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${u.username}</td><td>${u.elo}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// Căutare
+document.getElementById("searchInput").addEventListener("input", e => {
+  const term = e.target.value.toLowerCase();
+  const rows = document.querySelectorAll("#playersBody tr");
+  rows.forEach(row => {
+    const username = row.cells[0].innerText.toLowerCase();
+    row.style.display = username.includes(term) ? "" : "none";
+  });
+});
+
+// Sortare
+document.querySelectorAll("th[data-sort]").forEach(th => {
+  th.addEventListener("click", () => {
+    const tbody = document.getElementById("playersBody");
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    const key = th.dataset.sort;
+    const ascending = !th.dataset.asc || th.dataset.asc === "false";
+    rows.sort((a,b)=>{
+      let valA = key==="elo"?parseInt(a.cells[1].innerText):a.cells[0].innerText.toLowerCase();
+      let valB = key==="elo"?parseInt(b.cells[1].innerText):b.cells[0].innerText.toLowerCase();
+      if(valA < valB) return ascending? -1:1;
+      if(valA > valB) return ascending? 1:-1;
+      return 0;
+    });
+    th.dataset.asc = ascending;
+    tbody.innerHTML="";
+    rows.forEach(r=>tbody.appendChild(r));
+  });
+});
+
+// Încarcă jucători
+loadPlayers();
+</script>
+
+</body>
+</html>
