@@ -1,26 +1,51 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>Dashboard - Standoff 2 Faceit</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
-  body { font-family: Arial, sans-serif; background:#0f172a; color:#e5e7eb; text-align:center; }
-  h1 { background:#f97316; color:#000; margin:0; padding:15px; }
-  .box { margin:20px auto; max-width:500px; background:#020617; padding:20px; border-radius:10px; }
-  button { background:#f97316; border:none; padding:10px 20px; font-size:16px; border-radius:6px; cursor:pointer; }
-  ul { list-style:none; padding:0; }
-  li { background:#1e293b; margin:5px; padding:8px; border-radius:6px; }
+  body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0f172a;
+    color: #e5e7eb;
+    text-align: center;
+  }
+  h1 {
+    background: #f97316;
+    color: #000;
+    margin: 0;
+    padding: 15px;
+  }
+  .box {
+    margin: 20px auto;
+    max-width: 600px;
+    background: #020617;
+    padding: 20px;
+    border-radius: 10px;
+  }
+  button {
+    background: #f97316;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  ul { list-style: none; padding: 0; }
+  li { background: #1e293b; margin: 5px; padding: 8px; border-radius: 6px; }
+  .pickable { cursor: pointer; }
 </style>
 </head>
 <body>
 
-<h1>Standoff 2 Faceit Dashboard</h1>
-<p><a href="/logout" style="color:#f97316;">Logout</a></p>
+<h1>Standoff 2 Faceit - Dashboard</h1>
 
 <div class="box">
   <button id="join">Join Queue</button>
   <p id="queueText">Queue: 0/10</p>
+  <p><a href="/logout">Logout</a></p>
 </div>
 
 <div id="match" class="box" style="display:none;">
@@ -35,9 +60,13 @@
   </div>
   <h3>Available Players</h3>
   <ul id="pool"></ul>
+  <div>
+    <h3>Maps:</h3>
+    <ul id="mapsList"></ul>
+  </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/public/app.js"></script>
+<script src="/app.js"></script>
 </body>
 </html>
