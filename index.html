@@ -56,7 +56,8 @@ async function register(){
       password:pass.value
     })
   });
-  msg.innerText = (await r.json()).success ? "Registered!" : "Error";
+  const d = await r.json();
+  msg.innerText = d.success ? "Registered!" : (d.error || "Error");
 }
 
 async function login(){
@@ -69,7 +70,15 @@ async function login(){
     })
   });
   const d = await r.json();
-  msg.innerText = d.success ? "Logged in!" : "Login failed";
+
+  if(d.success){
+    msg.innerText = "Logged in!";
+    setTimeout(() => {
+      window.location.href = "/dashboard.html";
+    }, 800);
+  } else {
+    msg.innerText = d.error || "Login failed";
+  }
 }
 </script>
 </body>
