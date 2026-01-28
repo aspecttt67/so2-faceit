@@ -7,29 +7,43 @@ const { Pool } = require("pg");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-/* =======================
+/* ======================
+   IMPORTANT RAILWAY FIX
+====================== */
+app.set("trust proxy", 1);
+
+/* ======================
    MIDDLEWARE
-======================= */
-app.use(express.urlencoded({ extended: true }));
+====================== */
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use(
   session({
     secret: "super-secret",
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      secure: false,
+      sameSite: "lax",
+    },
   })
 );
 
 app.use("/public", express.static(path.join(__dirname, "public")));
 
-/* =======================
+/* ======================
    DATABASE
-======================= */
+====================== */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
+
+pool
+  .connect()
+  .then(() => console.log("✅ DB connected"))
+  .catch((err) => console.error("❌ DB connection error:", err));
 
 async function initDB() {
   try {
@@ -49,17 +63,17 @@ async function initDB() {
 
 initDB();
 
-/* =======================
+/* ======================
    AUTH MIDDLEWARE
-======================= */
+====================== */
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.redirect("/");
   next();
 }
 
-/* =======================
+/* ======================
    ROUTES
-======================= */
+====================== */
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
@@ -76,9 +90,16 @@ app.get("/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
 
-/* =======================
+/* ======================
+   HEALTHCHECK (CRUCIAL)
+====================== */
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
+/* ======================
    REGISTER
-======================= */
+====================== */
 app.post("/register", async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -100,9 +121,9 @@ app.post("/register", async (req, res) => {
   }
 });
 
-/* =======================
+/* ======================
    LOGIN
-======================= */
+====================== */
 app.post("/login", async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -131,9 +152,9 @@ app.post("/login", async (req, res) => {
   }
 });
 
-/* =======================
-   ADMIN – VIEW USERS
-======================= */
+/* ======================
+   API – USERS (ADMIN)
+====================== */
 app.get("/api/users", async (req, res) => {
   try {
     const result = await pool.query(
@@ -145,9 +166,9 @@ app.get("/api/users", async (req, res) => {
   }
 });
 
-/* =======================
+/* ======================
    START SERVER
-======================= */
+====================== */
 app.listen(PORT, () => {
   console.log("🚀 Server running on port", PORT);
 });
