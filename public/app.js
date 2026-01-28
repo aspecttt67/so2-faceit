@@ -1,10 +1,5 @@
 const socket = io();
 
-let username = ""; // va fi setat de server din sesiune
-
-// Primesc username din sesiune
-socket.on("yourUsername", name => { username = name; });
-
 // Elemente
 const playBtn = document.getElementById("playBtn");
 const modeSelect = document.getElementById("modeSelect");
@@ -14,7 +9,7 @@ const team2El = document.getElementById("team2");
 const mapsEl = document.getElementById("mapsList");
 const leaderboardEl = document.getElementById("leaderboardList");
 
-// Level
+// Functie Level
 function getLevel(elo){
   if(elo<1150) return 1;
   if(elo<1300) return 2;
@@ -41,14 +36,14 @@ tabButtons.forEach(btn=>{
 });
 tabButtons[0].click();
 
-// Play
+// Play Button
 playBtn.addEventListener("click", ()=>{
   const mode = modeSelect.value;
   if(!username) return alert("Username nu a fost setat!");
   socket.emit("joinMatch",{username,mode});
 });
 
-// Draft
+// Draft Match
 socket.on("matchDraft", draft=>{
   matchDiv.style.display="block";
 
@@ -84,7 +79,7 @@ socket.on("matchDraft", draft=>{
     mapsEl.appendChild(li);
   });
 
-  // Highlight banned
+  // Highlight banned maps
   draft.bannedMaps.forEach(map=>{
     const li = Array.from(mapsEl.children).find(x=>x.textContent===map);
     if(li){ li.style.textDecoration="line-through"; li.style.background="#000"; li.style.color="#f00"; }
