@@ -1,6 +1,5 @@
 const socket = io();
 
-// Elemente
 const playBtn = document.getElementById("playBtn");
 const modeSelect = document.getElementById("modeSelect");
 const matchDiv = document.getElementById("match");
@@ -10,7 +9,6 @@ const poolEl = document.getElementById("pool");
 const mapsEl = document.getElementById("mapsList");
 const leaderboardEl = document.getElementById("leaderboardList");
 
-// Level
 function getLevel(elo){
   if(elo<1150) return 1;
   if(elo<1300) return 2;
@@ -40,31 +38,28 @@ tabButtons[0].click();
 // Play
 playBtn.addEventListener("click", ()=>{
   const mode = modeSelect.value;
-  if(!username) return alert("Username nu a fost setat!");
+  if(!username) return alert("Username nu setat!");
   socket.emit("joinMatch",{username,mode});
 });
 
-// Draft Match
 socket.on("matchDraft", updateDraft);
 socket.on("updateDraft", updateDraft);
 
 function updateDraft(draft){
   matchDiv.style.display="block";
 
-  // Pool
   poolEl.innerHTML="";
-  draft.pool.forEach(player=>{
+  draft.pool.forEach(p=>{
     const li=document.createElement("li");
-    li.textContent=`${player.username} (Lvl ${getLevel(player.elo||1000)})`;
+    li.textContent=`${p.username} (Lvl ${getLevel(p.elo||1000)})`;
     li.classList.add("pickable");
     li.style.cursor="pointer";
     li.addEventListener("click", ()=>{
-      socket.emit("pickPlayer",{captain:username, player:player.username});
+      socket.emit("pickPlayer",{captain:username, player:p.username});
     });
     poolEl.appendChild(li);
   });
 
-  // Teams
   team1El.innerHTML=""; team2El.innerHTML="";
   draft.team1.forEach(p=>{
     const li=document.createElement("li");
@@ -79,7 +74,6 @@ function updateDraft(draft){
     team2El.appendChild(li);
   });
 
-  // Maps
   mapsEl.innerHTML="";
   draft.maps.forEach(map=>{
     const li=document.createElement("li");
@@ -90,15 +84,10 @@ function updateDraft(draft){
     li.style.display="inline-block";
     li.style.background="#f97316";
     li.style.borderRadius="5px";
-
-    li.addEventListener("click", ()=>{
-      socket.emit("banMap",{map});
-    });
-
+    li.addEventListener("click", ()=>socket.emit("banMap",{map}));
     mapsEl.appendChild(li);
   });
 
-  // Highlight banned maps
   draft.bannedMaps.forEach(map=>{
     const li = Array.from(mapsEl.children).find(x=>x.textContent===map);
     if(li){ li.style.textDecoration="line-through"; li.style.background="#000"; li.style.color="#f00"; }
@@ -106,8 +95,8 @@ function updateDraft(draft){
 }
 
 // Match start
-socket.on("matchStart", match=>{
-  alert(`Match start! Harta finala: ${match.finalMap}`);
+socket.on("matchStart", m=>{
+  alert(`Match start! Final map: ${m.finalMap}`);
   matchDiv.style.display="none";
 });
 
