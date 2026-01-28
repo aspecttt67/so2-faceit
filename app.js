@@ -7,6 +7,7 @@ import path from "path";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
 
+/* ===== SETUP ===== */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -27,8 +28,25 @@ app.use(
   })
 );
 
-// Serve static files
-app.use("/public", express.static(path.join(__dirname, "public")));
+// SERVE PUBLIC FOLDER CORECT
+app.use(express.static(path.join(__dirname, "public")));
+
+/* ===== HELPERS ===== */
+const usersPath = path.join(__dirname, "users.json");
+
+function loadUsers() {
+  if (!fs.existsSync(usersPath)) return [];
+  return JSON.parse(fs.readFileSync(usersPath, "utf-8"));
+}
+
+function saveUsers(users) {
+  fs.writeFileSync(usersPath, JSON.stringify(users, null, 2));
+}
+
+function requireAuth(req, res, next) {
+  if (!req.session.user) return res.redirect("/");
+  next();
+}
 
 /* ===== ROUTES ===== */
 
@@ -43,43 +61,9 @@ app.get("/register", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "register.html"));
 });
 
-/* ===== AUTH ===== */
-function requireAuth(req, res, next) {
-  if (!req.session.user) return res.redirect("/");
-  next();
-}
-
-// Login POST
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const usersPath = path.join(__dirname, "users.json");
-  const users = JSON.parse(fs.readFileSync(usersPath, "utf-8") || "[]");
-
-  const user = users.find(u => u.username === username);
-  if (!user) return res.status(401).send("User not found");
-
-  const ok = await bcrypt.compare(password, user.password);
-  if (!ok) return res.status(401).send("Wrong password");
-
-  req.session.user = { username };
-  res.redirect("/dashboard");
-});
-
-// Register POST
-app.post("/register", async (req, res) => {
-  const { username, password } = req.body;
-  const usersPath = path.join(__dirname, "users.json");
-  const users = JSON.parse(fs.readFileSync(usersPath, "utf-8") || "[]");
-
-  if (users.find(u => u.username === username)) {
-    return res.status(400).send("User exists");
-  }
-
-  const hash = await bcrypt.hash(password, 10);
-  users.push({ username, password: hash });
-  fs.writeFileSync(usersPath, JSON.stringify(users, null, 2));
-
-  res.redirect("/");
+// Dashboard (protected)
+app.get("/dashboard", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "protected", "dashboard.html"));
 });
 
 // Logout
@@ -87,24 +71,66 @@ app.get("/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
 
-// Dashboard protejat
-app.get("/dashboard", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "protected", "dashboard.html"));
+/* ===== AUTH ===== */
+
+// REGISTER
+app.post("/register", async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).send("Missing fields");
+  }
+
+  const users = loadUsers();
+  if (users.find(u => u.username === username)) {
+    return res.status(400).send("User already exists");
+  }
+
+  const hash = await bcrypt.hash(password, 10);
+  users.push({ username, password: hash });
+  saveUsers(users);
+
+  res.redirect("/");
 });
 
-/* ===== SOCKET.IO ===== */
+// LOGIN
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  const users = loadUsers();
+
+  const user = users.find(u => u.username === username);
+  if (!user) {
+    return res.status(401).send("User not found");
+  }
+
+  const ok = await bcrypt.compare(password, user.password);
+  if (!ok) {
+    return res.status(401).send("Wrong password");
+  }
+
+  req.session.user = { username };
+  res.redirect("/dashboard");
+});
+
+/* ===== SOCKET.IO MATCHMAKING ===== */
 
 let queue = [];
 let match = null;
 
 io.on("connection", socket => {
   socket.on("joinQueue", username => {
-    if (!queue.includes(username)) {
-      queue.push(username);
-      io.emit("queueUpdate", queue);
+    if (!username) return;
+    if (queue.includes(username)) return;
 
-      if (queue.length === 10) startMatch();
+    queue.push(username);
+    io.emit("queueUpdate", queue);
+
+    if (queue.length === 10) {
+      startMatch();
     }
+  });
+
+  socket.on("disconnect", () => {
+    // optional cleanup
   });
 });
 
@@ -124,4 +150,6 @@ function startMatch() {
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log("Server running on port", PORT));
+server.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
