@@ -37,6 +37,24 @@ function requireAuth(req, res, next) {
   next();
 }
 
+// ===== CREARE TABEL AUTOMAT =====
+async function createUsersTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        elo INTEGER DEFAULT 1000
+      );
+    `);
+    console.log("Tabelul users este gata!");
+  } catch (err) {
+    console.error("Eroare la crearea tabelului users:", err);
+  }
+}
+createUsersTable();
+
 // ===== ROUTES =====
 app.get("/", (req, res) => {
   if (req.session.user) return res.redirect("/dashboard");
@@ -78,27 +96,42 @@ app.post("/register", async (req, res) => {
 
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
-  const r = await pool.query("SELECT * FROM users WHERE username=$1", [username]);
-  if (r.rows.length === 0) return res.status(401).send("User not found");
+  try {
+    const r = await pool.query("SELECT * FROM users WHERE username=$1", [username]);
+    if (r.rows.length === 0) return res.status(401).send("User not found");
 
-  const user = r.rows[0];
-  const ok = await bcrypt.compare(password, user.password);
-  if (!ok) return res.status(401).send("Wrong password");
+    const user = r.rows[0];
+    const ok = await bcrypt.compare(password, user.password);
+    if (!ok) return res.status(401).send("Wrong password");
 
-  req.session.user = { username };
-  res.redirect("/dashboard");
+    req.session.user = { username };
+    res.redirect("/dashboard");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Database error");
+  }
 });
 
 // ===== API PLAYERI =====
 app.get("/api/players", requireAuth, async (req, res) => {
-  const r = await pool.query("SELECT username, elo FROM users ORDER BY elo DESC");
-  res.json(r.rows);
+  try {
+    const r = await pool.query("SELECT username, elo FROM users ORDER BY elo DESC");
+    res.json(r.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 app.post("/api/players/elo", requireAuth, async (req, res) => {
   const { username, elo } = req.body;
-  await pool.query("UPDATE users SET elo=$1 WHERE username=$2", [elo, username]);
-  res.json({ success: true });
+  try {
+    await pool.query("UPDATE users SET elo=$1 WHERE username=$2", [elo, username]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Database error" });
+  }
 });
 
 // ===== SOCKET.IO =====
@@ -108,8 +141,12 @@ const maps = ["sandstone", "rust", "province", "hanami", "dune", "zone7", "breez
 
 io.on("connection", (socket) => {
   async function sendLeaderboard() {
-    const r = await pool.query("SELECT username, elo FROM users ORDER BY elo DESC LIMIT 10");
-    socket.emit("updateLeaderboard", r.rows);
+    try {
+      const r = await pool.query("SELECT username, elo FROM users ORDER BY elo DESC LIMIT 10");
+      socket.emit("updateLeaderboard", r.rows);
+    } catch (err) {
+      console.error(err);
+    }
   }
   sendLeaderboard();
   const interval = setInterval(sendLeaderboard, 10000);
@@ -149,56 +186,46 @@ io.on("connection", (socket) => {
 
 // ===== Creează match =====
 async function createMatch(username, mode) {
-  const r = await pool.query("SELECT username, elo FROM users");
-  const allUsers = r.rows;
+  try {
+    const r = await pool.query("SELECT username, elo FROM users");
+    const allUsers = r.rows;
 
-  if (mode === "1v1") {
-    let players = [username];
-    while (players.length < 2) players.push("Bot" + (players.length + 1));
+    if (mode === "1v1") {
+      let players = [username];
+      while (players.length < 2) players.push("Bot" + (players.length + 1));
 
-    match = {
-      captains: [players[0], players[1]],
-      team1: [{ username: players[0], elo: allUsers.find((u) => u.username === players[0])?.elo || 1000 }],
-      team2: [{ username: players[1], elo: allUsers.find((u) => u.username === players[1])?.elo || 1000 }],
-      pool: [],
-      maps: [...maps],
-      bannedMaps: [],
-    };
-    io.emit("matchDraft", match);
-  } else if (mode === "5v5") {
-    let players = [username];
-    while (players.length < 10) players.push("Bot" + (players.length + 1));
-    const playersWithElo = players.map((u) => ({ username: u, elo: allUsers.find((x) => x.username === u)?.elo || 1000 }));
-    playersWithElo.sort((a, b) => b.elo - a.elo);
+      match = {
+        captains: [players[0], players[1]],
+        team1: [{ username: players[0], elo: allUsers.find((u) => u.username === players[0])?.elo || 1000 }],
+        team2: [{ username: players[1], elo: allUsers.find((u) => u.username === players[1])?.elo || 1000 }],
+        pool: [],
+        maps: [...maps],
+        bannedMaps: [],
+      };
+      io.emit("matchDraft", match);
+    } else if (mode === "5v5") {
+      let players = [username];
+      while (players.length < 10) players.push("Bot" + (players.length + 1));
+      const playersWithElo = players.map((u) => ({ username: u, elo: allUsers.find((x) => x.username === u)?.elo || 1000 }));
+      playersWithElo.sort((a, b) => b.elo - a.elo);
 
-    match = {
-      captains: [playersWithElo[0].username, playersWithElo[1].username],
-      team1: [playersWithElo[0]],
-      team2: [playersWithElo[1]],
-      pool: playersWithElo.slice(2),
-      maps: [...maps],
-      bannedMaps: [],
-    };
-    io.emit("matchDraft", match);
+      match = {
+        captains: [playersWithElo[0].username, playersWithElo[1].username],
+        team1: [playersWithElo[0]],
+        team2: [playersWithElo[1]],
+        pool: playersWithElo.slice(2),
+        maps: [...maps],
+        bannedMaps: [],
+      };
+      io.emit("matchDraft", match);
+    }
+  } catch (err) {
+    console.error(err);
   }
 }
 
 // ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, async () => {
+server.listen(PORT, () => {
   console.log("Server running on port", PORT);
-
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        elo INTEGER DEFAULT 1000
-      );
-    `);
-    console.log("Tabelul users este gata!");
-  } catch (err) {
-    console.error("Eroare la crearea tabelului users:", err);
-  }
 });
