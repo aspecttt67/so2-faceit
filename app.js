@@ -1,11 +1,13 @@
 import express from "express";
 import session from "express-session";
 import bcrypt from "bcrypt";
-import fs from "fs";
 import http from "http";
 import path from "path";
 import { Server } from "socket.io";
 import { fileURLToPath } from "url";
+import pkg from "pg";
+
+const { Pool } = pkg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,83 +29,98 @@ app.use(
 );
 app.use("/public", express.static(path.join(__dirname, "public")));
 
-/* ===== FUNCȚII UTILE ===== */
-function requireAuth(req,res,next){ if(!req.session.user) return res.redirect("/"); next(); }
+/* ===== DATABASE POSTGRES ===== */
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-function loadUsers(){
-  const p = path.join(__dirname,"users.json");
-  if(!fs.existsSync(p)) return [];
-  const d = fs.readFileSync(p,"utf-8");
-  if(!d) return [];
-  return JSON.parse(d);
-}
-function saveUsers(u){ fs.writeFileSync(path.join(__dirname,"users.json"), JSON.stringify(u,null,2)); }
+// Creează tabelul users dacă nu există
+(async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        elo INTEGER DEFAULT 1000
+      );
+    `);
+    console.log("Tabelul users este gata!");
+  } catch (err) {
+    console.error("Eroare la crearea tabelului users:", err);
+  }
+})();
+
+/* ===== FUNCTII UTILE ===== */
+function requireAuth(req,res,next){ if(!req.session.user) return res.redirect("/"); next(); }
 
 /* ===== ROUTES ===== */
 app.get("/",(req,res)=>{ if(req.session.user) return res.redirect("/dashboard"); res.sendFile(path.join(__dirname,"public","index.html")); });
 app.get("/register",(req,res)=>{ res.sendFile(path.join(__dirname,"public","register.html")); });
-
-app.get("/dashboard", requireAuth, (req,res)=>{
-  const htmlPath = path.join(__dirname,"protected","dashboard.html");
-  let html = fs.readFileSync(htmlPath,"utf-8");
-  html = html.replace("{{USERNAME}}", req.session.user.username);
-  res.send(html);
-});
-
-app.get("/players", requireAuth, (req,res)=>{
-  const htmlPath = path.join(__dirname,"protected","players.html");
-  res.sendFile(htmlPath);
-});
-
-// API endpoint pentru jucători (JSON)
-app.get("/api/players", requireAuth, (req,res)=>{
-  const users = loadUsers();
-  res.json(users);
-});
-
+app.get("/dashboard", requireAuth, (req,res)=>{ res.sendFile(path.join(__dirname,"protected","dashboard.html")); });
+app.get("/players", requireAuth, (req,res)=>{ res.sendFile(path.join(__dirname,"protected","players.html")); });
 app.get("/logout",(req,res)=>{ req.session.destroy(()=>res.redirect("/")); });
 
 /* ===== AUTH ===== */
-app.post("/register",async(req,res)=>{
-  const {username,password}=req.body;
-  let users = loadUsers();
-  if(users.find(u=>u.username===username)) return res.status(400).send("User exists");
+app.post("/register", async (req,res)=>{
+  const { username, password } = req.body;
   const hash = await bcrypt.hash(password,10);
-  users.push({username,password:hash,elo:1000});
-  saveUsers(users);
-  req.session.user={username};
+  try {
+    await pool.query(
+      "INSERT INTO users (username,password) VALUES ($1,$2)",
+      [username, hash]
+    );
+    req.session.user = { username };
+    res.redirect("/dashboard");
+  } catch {
+    res.status(400).send("User exists");
+  }
+});
+
+app.post("/login", async (req,res)=>{
+  const { username, password } = req.body;
+  const r = await pool.query("SELECT * FROM users WHERE username=$1", [username]);
+  if(r.rows.length === 0) return res.status(401).send("User not found");
+
+  const user = r.rows[0];
+  const ok = await bcrypt.compare(password,user.password);
+  if(!ok) return res.status(401).send("Wrong password");
+
+  req.session.user = { username };
   res.redirect("/dashboard");
 });
 
-app.post("/login",async(req,res)=>{
-  const {username,password}=req.body;
-  const users=loadUsers();
-  const user=users.find(u=>u.username===username);
-  if(!user) return res.status(401).send("User not found");
-  const ok=await bcrypt.compare(password,user.password);
-  if(!ok) return res.status(401).send("Wrong password");
-  req.session.user={username};
-  res.redirect("/dashboard");
+/* ===== API PLAYERI ===== */
+app.get("/api/players", requireAuth, async (req,res)=>{
+  const r = await pool.query("SELECT username, elo FROM users ORDER BY elo DESC");
+  res.json(r.rows);
+});
+
+app.post("/api/players/elo", requireAuth, async (req,res)=>{
+  const { username, elo } = req.body;
+  await pool.query("UPDATE users SET elo=$1 WHERE username=$2", [elo, username]);
+  res.json({ success:true });
 });
 
 /* ===== SOCKET.IO ===== */
-
 let onlinePlayers=[]; 
 let match=null;
 const maps=["sandstone","rust","province","hanami","dune","zone7","breeze"];
 
 io.on("connection", socket => {
+
   // Leaderboard live
-  function sendLeaderboard(){
-    const users = loadUsers().sort((a,b)=>b.elo-a.elo).slice(0,10);
-    socket.emit("updateLeaderboard", users);
+  async function sendLeaderboard(){
+    const r = await pool.query("SELECT username, elo FROM users ORDER BY elo DESC LIMIT 10");
+    socket.emit("updateLeaderboard", r.rows);
   }
   sendLeaderboard();
   const interval = setInterval(sendLeaderboard, 10000);
   socket.on("disconnect", () => clearInterval(interval));
 
   // Join match
-  socket.on("joinMatch", ({ username, mode }) => {
+  socket.on("joinMatch", async ({ username, mode }) => {
     if(!username) return;
     if(!onlinePlayers.includes(username)) onlinePlayers.push(username);
     createMatch(username, mode);
@@ -135,11 +152,13 @@ io.on("connection", socket => {
       match = null;
     }
   });
+
 });
 
 // Creează match
-function createMatch(username, mode){
-  const allUsers = loadUsers();
+async function createMatch(username, mode){
+  const r = await pool.query("SELECT username, elo FROM users");
+  const allUsers = r.rows;
 
   if(mode==="1v1"){
     let players=[username];
@@ -173,5 +192,5 @@ function createMatch(username, mode){
 }
 
 /* ===== START SERVER ===== */
-const PORT = process.env.PORT||3000;
+const PORT = process.env.PORT || 3000;
 server.listen(PORT,()=>console.log("Server running on port",PORT));
