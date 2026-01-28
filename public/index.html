@@ -46,6 +46,16 @@
       border: none;
       width: 200px;
     }
+    a {
+      color: #f97316;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    p.register-link {
+      margin-top: 10px;
+    }
   </style>
 </head>
 <body>
@@ -60,6 +70,9 @@
     <input name="password" type="password" placeholder="Password" required />
     <button type="submit">Login</button>
   </form>
+
+  <!-- LINK REGISTER -->
+  <p class="register-link">Nu ai cont? <a href="/register">Creează unul</a></p>
 
   <!-- BUTON JOIN QUEUE (ascuns până după login) -->
   <button id="join" style="display:none;">Join Queue</button>
