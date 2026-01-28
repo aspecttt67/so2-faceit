@@ -1,16 +1,10 @@
-import express from "express";
-import session from "express-session";
-import bcrypt from "bcrypt";
-import http from "http";
-import path from "path";
-import { Server } from "socket.io";
-import { fileURLToPath } from "url";
-import pkg from "pg";
-
-const { Pool } = pkg;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const express = require("express");
+const session = require("express-session");
+const bcrypt = require("bcrypt");
+const http = require("http");
+const path = require("path");
+const { Server } = require("socket.io");
+const { Pool } = require("pg");
 
 const app = express();
 const server = http.createServer(app);
@@ -32,7 +26,7 @@ app.use("/public", express.static(path.join(__dirname, "public")));
 /* ===== DATABASE POSTGRES ===== */
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
 });
 
 /* ===== FUNCTII UTILE ===== */
@@ -176,9 +170,9 @@ async function createMatch(username, mode){
 
 /* ===== START SERVER ===== */
 const PORT = process.env.PORT || 3000;
+server.listen(PORT, async () => {
+  console.log("Server running on port", PORT);
 
-// Initialize DB first, then start server
-async function initDatabase() {
   try {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -192,8 +186,4 @@ async function initDatabase() {
   } catch (err) {
     console.error("Eroare la crearea tabelului users:", err);
   }
-}
-
-initDatabase().then(() => {
-  server.listen(PORT,()=>console.log("Server running on port",PORT));
 });
