@@ -23,16 +23,16 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: false, // Railway = false (nu HTTPS direct)
+      secure: false,
       httpOnly: true
     }
   })
 );
 
-// static files
+// 🔓 DOAR public e static
 app.use(express.static(path.join(__dirname, "public")));
 
-// 🛡️ middleware de protecție
+// 🛡️ middleware auth
 function requireAuth(req, res, next) {
   if (!req.session.user) {
     return res.redirect("/");
@@ -52,7 +52,7 @@ app.post("/login", async (req, res) => {
   if (!ok) return res.status(401).send("Wrong password");
 
   req.session.user = { username };
-  res.redirect("/dashboard.html");
+  res.redirect("/dashboard"); // 🔴 IMPORTANT
 });
 
 // 📝 REGISTER
@@ -78,12 +78,12 @@ app.get("/logout", (req, res) => {
   });
 });
 
-// 🔒 PROTECȚIE DASHBOARD
-app.get("/dashboard.html", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "dashboard.html"));
+// 🔒 DASHBOARD PROTEJAT
+app.get("/dashboard", requireAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "protected", "dashboard.html"));
 });
 
-/* ===== Socket.IO (rămâne ca înainte) ===== */
+/* ===== Socket.IO ===== */
 
 let queue = [];
 let match = null;
