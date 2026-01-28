@@ -74,10 +74,6 @@ app.get("/dashboard", requireAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "protected", "dashboard.html"));
 });
 
-app.get("/players", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "protected", "players.html"));
-});
-
 app.get("/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
@@ -104,7 +100,7 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
     const r = await pool.query("SELECT * FROM users WHERE username=$1", [username]);
-    console.log("🔍 Query login result:", r.rows);
+    console.log("🔍 Login query result:", r.rows);
 
     if (r.rows.length === 0) return res.status(401).send("User not found");
 
