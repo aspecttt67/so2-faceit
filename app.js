@@ -1,15 +1,10 @@
-import express from "express";
-import session from "express-session";
-import bcrypt from "bcrypt";
-import http from "http";
-import path from "path";
-import { Server } from "socket.io";
-import pkg from "pg";
-import { fileURLToPath } from "url";
-
-const { Pool } = pkg;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const express = require("express");
+const session = require("express-session");
+const bcrypt = require("bcrypt");
+const http = require("http");
+const path = require("path");
+const { Server } = require("socket.io");
+const { Pool } = require("pg");
 
 const app = express();
 const server = http.createServer(app);
