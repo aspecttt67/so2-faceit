@@ -1,158 +1,109 @@
-import express from "express";
-import session from "express-session";
-import bcrypt from "bcrypt";
-import fs from "fs";
-import http from "http";
-import path from "path";
-import { Server } from "socket.io";
-import { fileURLToPath } from "url";
+const socket = io();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const playBtn = document.getElementById("playBtn");
+const modeSelect = document.getElementById("modeSelect");
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
+const matchDiv = document.getElementById("match");
+const team1El = document.getElementById("team1");
+const team2El = document.getElementById("team2");
+const mapsEl = document.getElementById("mapsList");
+const leaderboardEl = document.getElementById("leaderboardList");
 
-/* ===== MIDDLEWARE ===== */
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "super-secret-key",
-    resave: false,
-    saveUninitialized: false,
-    cookie: { secure: false, httpOnly: true }
-  })
-);
-
-app.use("/public", express.static(path.join(__dirname, "public")));
-
-/* ===== AUTH ===== */
-function requireAuth(req, res, next) {
-  if (!req.session.user) return res.redirect("/");
-  next();
+// Functie Level
+function getLevel(elo) {
+  if (elo < 1150) return 1;
+  if (elo < 1300) return 2;
+  if (elo < 1500) return 3;
+  if (elo < 1700) return 4;
+  if (elo < 1900) return 5;
+  if (elo < 2200) return 6;
+  if (elo < 2500) return 7;
+  if (elo < 2700) return 8;
+  if (elo < 3000) return 9;
+  return 10;
 }
 
-// Users
-function loadUsers() {
-  const usersPath = path.join(__dirname, "users.json");
-  if (!fs.existsSync(usersPath)) return [];
-  const data = fs.readFileSync(usersPath, "utf-8");
-  if (!data) return [];
-  return JSON.parse(data);
-}
+// TAB NAVIGATION
+const tabButtons = document.querySelectorAll(".tab-btn");
+const tabContents = document.querySelectorAll(".tab-content");
+tabButtons.forEach(btn => {
+  btn.addEventListener("click", () => {
+    tabButtons.forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const tab = btn.dataset.tab;
+    tabContents.forEach(tc => { tc.style.display = tc.id === tab ? "block" : "none"; });
+  });
+});
+tabButtons[0].click(); // default tab
 
-function saveUsers(users) {
-  const usersPath = path.join(__dirname, "users.json");
-  fs.writeFileSync(usersPath, JSON.stringify(users, null, 2));
-}
-
-/* ===== ROUTES ===== */
-app.get("/", (req, res) => {
-  if (req.session.user) return res.redirect("/dashboard");
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+// Play Button
+playBtn.addEventListener("click", () => {
+  const mode = modeSelect.value;
+  const username = prompt("Introdu username-ul tău");
+  if (!username) return;
+  socket.emit("joinMatch", { username, mode });
 });
 
-app.get("/register", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "register.html"));
-});
+// Draft Match
+socket.on("matchDraft", draft => {
+  matchDiv.style.display = "block";
 
-app.get("/dashboard", requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, "protected", "dashboard.html"));
-});
+  // Teams
+  team1El.innerHTML = "";
+  team2El.innerHTML = "";
+  draft.team1.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = `${p.username} (Lvl ${getLevel(p.elo || 1000)})`;
+    li.style.background = "#1e40af";
+    team1El.appendChild(li);
+  });
+  draft.team2.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = `${p.username} (Lvl ${getLevel(p.elo || 1000)})`;
+    li.style.background = "#dc2626";
+    team2El.appendChild(li);
+  });
 
-app.get("/logout", (req, res) => {
-  req.session.destroy(() => res.redirect("/"));
-});
+  // Maps
+  mapsEl.innerHTML = "";
+  draft.maps.forEach(map => {
+    const li = document.createElement("li");
+    li.textContent = map;
+    li.style.cursor = "pointer";
+    li.style.margin = "5px";
+    li.style.padding = "5px";
+    li.style.display = "inline-block";
+    li.style.background = "#f97316";
+    li.style.borderRadius = "5px";
+    li.addEventListener("click", () => {
+      socket.emit("banMap", { map });
+    });
+    mapsEl.appendChild(li);
+  });
 
-/* ===== AUTH ROUTES ===== */
-app.post("/register", async (req, res) => {
-  const { username, password } = req.body;
-  let users = loadUsers();
-
-  if (users.find(u => u.username === username)) {
-    return res.status(400).send("User exists");
-  }
-
-  const hash = await bcrypt.hash(password, 10);
-  users.push({ username, password: hash, elo: 1000 }); // ELO inițial
-  saveUsers(users);
-
-  req.session.user = { username };
-  res.redirect("/dashboard");
-});
-
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-  const users = loadUsers();
-
-  const user = users.find(u => u.username === username);
-  if (!user) return res.status(401).send("User not found");
-
-  const ok = await bcrypt.compare(password, user.password);
-  if (!ok) return res.status(401).send("Wrong password");
-
-  req.session.user = { username };
-  res.redirect("/dashboard");
-});
-
-/* ===== SOCKET.IO ===== */
-
-let queue = [];
-let match = null;
-const maps = ["sandstone","rust","province","hanami","dune","zone7","breeze"];
-
-io.on("connection", socket => {
-
-  // Trimite leaderboard la conectare și periodic
-  function sendLeaderboard() {
-    const users = loadUsers()
-      .sort((a,b) => b.elo - a.elo)
-      .slice(0,10);
-    socket.emit("updateLeaderboard", users);
-  }
-
-  sendLeaderboard();
-  const interval = setInterval(sendLeaderboard, 10000);
-  socket.on("disconnect", () => clearInterval(interval));
-
-  // Join queue
-  socket.on("joinQueue", username => {
-    if (!queue.includes(username)) queue.push(username);
-    io.emit("queueUpdate", queue);
-
-    if (queue.length >= 10) startMatch();
+  // Highlight banned maps
+  draft.bannedMaps.forEach(map => {
+    const li = Array.from(mapsEl.children).find(x => x.textContent === map);
+    if (li) {
+      li.style.textDecoration = "line-through";
+      li.style.background = "#000";
+      li.style.color = "#f00";
+    }
   });
 });
 
-/* ===== START MATCH ===== */
-function startMatch() {
-  const players = [...queue];
-  queue = [];
+// Match start
+socket.on("matchStart", match => {
+  alert(`Match start! Harta finala: ${match.finalMap}`);
+  matchDiv.style.display = "none";
+});
 
-  // Alege cei 2 cu ELO cel mai mare ca căpitani
-  const allUsers = loadUsers();
-  const playersWithElo = players.map(u => {
-    const user = allUsers.find(x => x.username === u);
-    return { username: u, elo: user ? user.elo : 1000 };
-  }).sort((a,b) => b.elo - a.elo);
-
-  // Match object
-  match = {
-    captains: [playersWithElo[0].username, playersWithElo[1].username],
-    team1: [playersWithElo[0].username],
-    team2: [playersWithElo[1].username],
-    pool: playersWithElo.slice(2).map(p => p.username),
-    maps: [...maps],
-    bannedMaps: []
-  };
-
-  // Emit draft la toți jucătorii
-  io.emit("matchDraft", match);
-}
-
-/* ===== START SERVER ===== */
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log("Server running on port", PORT));
+// Leaderboard
+socket.on("updateLeaderboard", users => {
+  leaderboardEl.innerHTML = "";
+  users.forEach(u => {
+    const li = document.createElement("li");
+    li.textContent = `${u.username} - ELO: ${u.elo} (Lvl ${getLevel(u.elo)})`;
+    leaderboardEl.appendChild(li);
+  });
+});
