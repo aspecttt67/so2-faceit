@@ -6,10 +6,11 @@ const modeSelect = document.getElementById("modeSelect");
 const matchDiv = document.getElementById("match");
 const team1El = document.getElementById("team1");
 const team2El = document.getElementById("team2");
+const poolEl = document.getElementById("pool");
 const mapsEl = document.getElementById("mapsList");
 const leaderboardEl = document.getElementById("leaderboardList");
 
-// Functie Level
+// Level
 function getLevel(elo){
   if(elo<1150) return 1;
   if(elo<1300) return 2;
@@ -36,7 +37,7 @@ tabButtons.forEach(btn=>{
 });
 tabButtons[0].click();
 
-// Play Button
+// Play
 playBtn.addEventListener("click", ()=>{
   const mode = modeSelect.value;
   if(!username) return alert("Username nu a fost setat!");
@@ -44,8 +45,24 @@ playBtn.addEventListener("click", ()=>{
 });
 
 // Draft Match
-socket.on("matchDraft", draft=>{
+socket.on("matchDraft", updateDraft);
+socket.on("updateDraft", updateDraft);
+
+function updateDraft(draft){
   matchDiv.style.display="block";
+
+  // Pool
+  poolEl.innerHTML="";
+  draft.pool.forEach(player=>{
+    const li=document.createElement("li");
+    li.textContent=`${player.username} (Lvl ${getLevel(player.elo||1000)})`;
+    li.classList.add("pickable");
+    li.style.cursor="pointer";
+    li.addEventListener("click", ()=>{
+      socket.emit("pickPlayer",{captain:username, player:player.username});
+    });
+    poolEl.appendChild(li);
+  });
 
   // Teams
   team1El.innerHTML=""; team2El.innerHTML="";
@@ -73,9 +90,11 @@ socket.on("matchDraft", draft=>{
     li.style.display="inline-block";
     li.style.background="#f97316";
     li.style.borderRadius="5px";
+
     li.addEventListener("click", ()=>{
       socket.emit("banMap",{map});
     });
+
     mapsEl.appendChild(li);
   });
 
@@ -84,7 +103,7 @@ socket.on("matchDraft", draft=>{
     const li = Array.from(mapsEl.children).find(x=>x.textContent===map);
     if(li){ li.style.textDecoration="line-through"; li.style.background="#000"; li.style.color="#f00"; }
   });
-});
+}
 
 // Match start
 socket.on("matchStart", match=>{
