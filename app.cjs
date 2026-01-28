@@ -31,13 +31,18 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
+// ===== DEBUG CONEXIUNE =====
+pool.query("SELECT NOW()")
+  .then(r => console.log("✅ DB connected:", r.rows))
+  .catch(e => console.error("❌ DB connection error:", e));
+
 // ===== FUNCTII UTILE =====
 function requireAuth(req, res, next) {
   if (!req.session.user) return res.redirect("/");
   next();
 }
 
-// ===== CREARE TABEL AUTOMAT =====
+// ===== CREARE TABEL AUTOMAT CU DEBUG =====
 async function createUsersTable() {
   try {
     await pool.query(`
@@ -48,9 +53,9 @@ async function createUsersTable() {
         elo INTEGER DEFAULT 1000
       );
     `);
-    console.log("Tabelul users este gata!");
+    console.log("✅ Tabelul users este gata!");
   } catch (err) {
-    console.error("Eroare la crearea tabelului users:", err);
+    console.error("❌ Eroare la crearea tabelului users:", err);
   }
 }
 createUsersTable();
@@ -77,20 +82,21 @@ app.get("/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
 
-// ===== AUTH =====
+// ===== AUTH cu debug complet =====
 app.post("/register", async (req, res) => {
   const { username, password } = req.body;
   const hash = await bcrypt.hash(password, 10);
   try {
-    await pool.query(
-      "INSERT INTO users (username,password) VALUES ($1,$2)",
+    const result = await pool.query(
+      "INSERT INTO users (username,password) VALUES ($1,$2) RETURNING *",
       [username, hash]
     );
+    console.log("✅ User creat:", result.rows[0]);
     req.session.user = { username };
     res.redirect("/dashboard");
   } catch (err) {
-    console.error(err);
-    res.status(400).send("User exists");
+    console.error("❌ Eroare register:", err);
+    res.status(400).send("Database error (check logs)");
   }
 });
 
@@ -98,6 +104,8 @@ app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   try {
     const r = await pool.query("SELECT * FROM users WHERE username=$1", [username]);
+    console.log("🔍 Query login result:", r.rows);
+
     if (r.rows.length === 0) return res.status(401).send("User not found");
 
     const user = r.rows[0];
@@ -107,125 +115,13 @@ app.post("/login", async (req, res) => {
     req.session.user = { username };
     res.redirect("/dashboard");
   } catch (err) {
-    console.error(err);
-    res.status(500).send("Database error");
+    console.error("❌ Eroare login:", err);
+    res.status(500).send("Database error (check logs)");
   }
 });
-
-// ===== API PLAYERI =====
-app.get("/api/players", requireAuth, async (req, res) => {
-  try {
-    const r = await pool.query("SELECT username, elo FROM users ORDER BY elo DESC");
-    res.json(r.rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Database error" });
-  }
-});
-
-app.post("/api/players/elo", requireAuth, async (req, res) => {
-  const { username, elo } = req.body;
-  try {
-    await pool.query("UPDATE users SET elo=$1 WHERE username=$2", [elo, username]);
-    res.json({ success: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Database error" });
-  }
-});
-
-// ===== SOCKET.IO =====
-let onlinePlayers = [];
-let match = null;
-const maps = ["sandstone", "rust", "province", "hanami", "dune", "zone7", "breeze"];
-
-io.on("connection", (socket) => {
-  async function sendLeaderboard() {
-    try {
-      const r = await pool.query("SELECT username, elo FROM users ORDER BY elo DESC LIMIT 10");
-      socket.emit("updateLeaderboard", r.rows);
-    } catch (err) {
-      console.error(err);
-    }
-  }
-  sendLeaderboard();
-  const interval = setInterval(sendLeaderboard, 10000);
-  socket.on("disconnect", () => clearInterval(interval));
-
-  socket.on("joinMatch", async ({ username, mode }) => {
-    if (!username) return;
-    if (!onlinePlayers.includes(username)) onlinePlayers.push(username);
-    createMatch(username, mode);
-  });
-
-  socket.on("pickPlayer", ({ captain, player }) => {
-    if (!match) return;
-    const poolIndex = match.pool.findIndex((p) => p.username === player);
-    if (poolIndex === -1) return;
-
-    if (match.captains[0] === captain) match.team1.push(match.pool[poolIndex]);
-    else if (match.captains[1] === captain) match.team2.push(match.pool[poolIndex]);
-
-    match.pool.splice(poolIndex, 1);
-    io.emit("updateDraft", match);
-  });
-
-  socket.on("banMap", ({ map }) => {
-    if (!match) return;
-    if (!match.bannedMaps.includes(map)) match.bannedMaps.push(map);
-    io.emit("updateDraft", match);
-
-    const available = match.maps.filter((m) => !match.bannedMaps.includes(m));
-    if (available.length === 1) {
-      match.finalMap = available[0];
-      io.emit("matchStart", match);
-      match = null;
-    }
-  });
-});
-
-// ===== Creează match =====
-async function createMatch(username, mode) {
-  try {
-    const r = await pool.query("SELECT username, elo FROM users");
-    const allUsers = r.rows;
-
-    if (mode === "1v1") {
-      let players = [username];
-      while (players.length < 2) players.push("Bot" + (players.length + 1));
-
-      match = {
-        captains: [players[0], players[1]],
-        team1: [{ username: players[0], elo: allUsers.find((u) => u.username === players[0])?.elo || 1000 }],
-        team2: [{ username: players[1], elo: allUsers.find((u) => u.username === players[1])?.elo || 1000 }],
-        pool: [],
-        maps: [...maps],
-        bannedMaps: [],
-      };
-      io.emit("matchDraft", match);
-    } else if (mode === "5v5") {
-      let players = [username];
-      while (players.length < 10) players.push("Bot" + (players.length + 1));
-      const playersWithElo = players.map((u) => ({ username: u, elo: allUsers.find((x) => x.username === u)?.elo || 1000 }));
-      playersWithElo.sort((a, b) => b.elo - a.elo);
-
-      match = {
-        captains: [playersWithElo[0].username, playersWithElo[1].username],
-        team1: [playersWithElo[0]],
-        team2: [playersWithElo[1]],
-        pool: playersWithElo.slice(2),
-        maps: [...maps],
-        bannedMaps: [],
-      };
-      io.emit("matchDraft", match);
-    }
-  } catch (err) {
-    console.error(err);
-  }
-}
 
 // ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log("Server running on port", PORT);
+  console.log("✅ Server running on port", PORT);
 });
