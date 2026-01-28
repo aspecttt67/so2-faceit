@@ -1,17 +1,15 @@
 const socket = io();
 
-// Ascunde Join Queue până după login
+// Elemente
 const joinBtn = document.getElementById("join");
-joinBtn.style.display = "block"; // deja afisat dupa login
+const queueText = document.getElementById("queueText");
+const matchDiv = document.getElementById("match");
+const team1El = document.getElementById("team1");
+const team2El = document.getElementById("team2");
+const poolEl = document.getElementById("pool");
+const mapsEl = document.getElementById("mapsList");
 
-// Join queue
-joinBtn.addEventListener("click", () => {
-  const username = prompt("Introdu username-ul tău");
-  if (!username) return;
-  socket.emit("joinQueue", username);
-});
-
-// Functie level
+// Functie Level
 function getLevel(elo) {
   if (elo < 1150) return 1;
   if (elo < 1300) return 2;
@@ -25,61 +23,54 @@ function getLevel(elo) {
   return 10;
 }
 
-// Update queue
+// Join Queue
+joinBtn.addEventListener("click", () => {
+  const username = prompt("Introdu username-ul tău");
+  if (!username) return;
+  console.log("Trimitem joinQueue pentru:", username);
+  socket.emit("joinQueue", username);
+});
+
+// Update Queue
 socket.on("queueUpdate", queue => {
-  const queueText = document.getElementById("queueText");
   queueText.style.display = "block";
   queueText.innerText = `Queue: ${queue.length}/10`;
 });
 
-// Draft match
+// Draft Match
 socket.on("matchDraft", draft => {
-  const matchDiv = document.getElementById("match");
   matchDiv.style.display = "block";
 
   // Pool
-  const poolEl = document.getElementById("pool");
   poolEl.innerHTML = "";
   draft.pool.forEach(player => {
     const li = document.createElement("li");
     li.textContent = `${player.username} (ELO: ${player.elo}, Lvl ${getLevel(player.elo)})`;
     li.classList.add("pickable");
     li.addEventListener("click", () => {
-      const captain = prompt("Username captain care face pick-ul");
+      const captain = prompt("Introdu username-ul captain care face pick-ul");
       socket.emit("pickPlayer", { captain, player: player.username });
     });
     poolEl.appendChild(li);
   });
 
   // Teams
-  const team1El = document.getElementById("team1");
-  const team2El = document.getElementById("team2");
   team1El.innerHTML = "";
   team2El.innerHTML = "";
-
   draft.team1.forEach(p => {
     const li = document.createElement("li");
     li.textContent = `${p.username} (Lvl ${getLevel(p.elo)})`;
-    li.style.background = "#1e40af"; // echipa albastra
+    li.style.background = "#1e40af";
     team1El.appendChild(li);
   });
-
   draft.team2.forEach(p => {
     const li = document.createElement("li");
     li.textContent = `${p.username} (Lvl ${getLevel(p.elo)})`;
-    li.style.background = "#dc2626"; // echipa rosie
+    li.style.background = "#dc2626";
     team2El.appendChild(li);
   });
 
   // Maps
-  let mapsEl = document.getElementById("maps");
-  if (!mapsEl) {
-    const div = document.createElement("div");
-    div.innerHTML = `<h3>Maps:</h3><ul id="mapsList"></ul>`;
-    matchDiv.appendChild(div);
-    mapsEl = document.getElementById("mapsList");
-  }
-
   mapsEl.innerHTML = "";
   draft.maps.forEach(map => {
     const li = document.createElement("li");
@@ -106,12 +97,11 @@ socket.on("matchDraft", draft => {
       li.style.color = "#f00";
     }
   });
-
 });
 
 // Match start
 socket.on("matchStart", match => {
   alert(`Match start! Harta finala: ${match.finalMap}`);
-  document.getElementById("match").style.display = "none";
-  document.getElementById("queueText").innerText = "Queue: 0/10";
+  matchDiv.style.display = "none";
+  queueText.innerText = "Queue: 0/10";
 });
