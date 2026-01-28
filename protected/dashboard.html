@@ -17,23 +17,19 @@ li { background:#1e293b; margin:5px; padding:8px; border-radius:6px; }
 .tab-btn.active { background:#fff; color:#f97316; }
 .pickable { cursor:pointer; }
 </style>
-
-<!-- USERNAME DIN SESIUNE -->
 <script>
-  const username = "{{USERNAME}}";
+const username = "{{USERNAME}}";
 </script>
-
 </head>
 <body>
 
-<h1>Standoff 2 Faceit - Dashboard</h1>
+<h1>Dashboard - Standoff 2 Faceit</h1>
 
 <div class="tabs">
   <button class="tab-btn" data-tab="play">Play</button>
   <button class="tab-btn" data-tab="leaderboard">Leaderboard</button>
 </div>
 
-<!-- Play Tab -->
 <div id="play" class="tab-content">
   <div class="box">
     <h2>Choose Mode</h2>
@@ -61,7 +57,6 @@ li { background:#1e293b; margin:5px; padding:8px; border-radius:6px; }
   </div>
 </div>
 
-<!-- Leaderboard Tab -->
 <div id="leaderboard" class="tab-content">
   <div class="box">
     <h2>Top 10 Players</h2>
@@ -72,6 +67,6 @@ li { background:#1e293b; margin:5px; padding:8px; border-radius:6px; }
 <p><a href="/logout">Logout</a></p>
 
 <script src="/socket.io/socket.io.js"></script>
-<script src="/app.js"></script>
+<script src="/public/app.js"></script>
 </body>
 </html>
