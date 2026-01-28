@@ -19,12 +19,17 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// SESSION PERSISTENT 7 ZILE
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "super-secret-key",
     resave: false,
     saveUninitialized: false,
-    cookie: { secure: false, httpOnly: true }
+    cookie: { 
+      secure: false, 
+      httpOnly: true, 
+      maxAge: 1000 * 60 * 60 * 24 * 7 // 7 zile
+    }
   })
 );
 
@@ -95,7 +100,8 @@ app.post("/register", async (req, res) => {
   users.push({ username, password: hash, elo: 1000 }); // 1000 initial ELO
   saveUsers(users);
 
-  res.redirect("/");
+  req.session.user = { username }; // logheaza automat dupa register
+  res.redirect("/dashboard");
 });
 
 // Login POST
